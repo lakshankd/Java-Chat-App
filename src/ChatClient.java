@@ -3,8 +3,8 @@ import java.net.*;
 
 public class ChatClient {
     public static void main(String[] args) {
-        String serverAddress = "127.0.0.1"; // Change to the server's IP address or hostname
-        int serverPort = 12346; // Change to the server's port number
+        String serverAddress = "127.0.0.1";
+        int serverPort = 12346;
 
         Socket socket = null; // Declare the socket outside the try-catch block
 

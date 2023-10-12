@@ -7,7 +7,7 @@ public class ChatServer {
     private static Map<String, PrintWriter> connectedClients = new ConcurrentHashMap<>();
 
     public static void main(String[] args) {
-        int port = 12346; // Change to your desired port number
+        int port = 12346;
 
         try (ServerSocket serverSocket = new ServerSocket(port)) {
             System.out.println("Server is running and listening on port " + port);
@@ -35,7 +35,7 @@ public class ChatServer {
             try {
                 out = new PrintWriter(clientSocket.getOutputStream(), true);
                 in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-                out.println("Please register with a unique username (e.g., REGISTER John)");
+                out.println("Please register: REGISTER <unique_user_name>");
 
                 String registrationMessage = in.readLine();
                 if (registrationMessage.startsWith("REGISTER ")) {
@@ -75,7 +75,7 @@ public class ChatServer {
                             String text = parts[2];
                             PrintWriter recipientWriter = connectedClients.get(recipient);
                             if (recipientWriter != null) {
-                                recipientWriter.println(username + " (private): " + text);
+                                recipientWriter.println(username + ": " + text);
                             } else {
                                 out.println("User " + recipient + " is not online.");
                             }
