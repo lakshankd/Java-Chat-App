@@ -1,61 +1,68 @@
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
-import java.net.Socket;
+import java.io.*;
+import java.net.*;
 
 public class ChatClient {
     public static void main(String[] args) {
-        String serverAddress = "127.0.0.1";
-        int serverPort = 12345;
+        String serverAddress = "127.0.0.1"; // Change to the server's IP address or hostname
+        int serverPort = 12346; // Change to the server's port number
+
+        Socket socket = null; // Declare the socket outside the try-catch block
 
         try {
-            Socket socket = new Socket(serverAddress, serverPort);
+            socket = new Socket(serverAddress, serverPort);
             PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            BufferedReader userInput = new BufferedReader(new InputStreamReader(System.in));
+            BufferedReader consoleInput = new BufferedReader(new InputStreamReader(System.in));
 
-            //  Receive the registration request from the server
-            String registrationRequest = in.readLine();
-            System.out.println(registrationRequest);
+            // Registration
+            String registrationMessage = in.readLine();
+            System.out.println(registrationMessage);
 
-            // Prompt the user to input "REGISTER <unique_user_name>"
-            String userRegistration = in.readLine();
-            out.println(userRegistration);
+            String userInput;
+            while (true) {
+                userInput = consoleInput.readLine();
+                if (userInput.startsWith("REGISTER ")) {
+                    out.println(userInput);
+                    break;
+                } else {
+                    System.out.println("Invalid input. Please start with 'REGISTER your_username'");
+                }
+            }
 
-            //  Receive the welcome message from server
+            // Wait for the server's welcome message
             String welcomeMessage = in.readLine();
             System.out.println(welcomeMessage);
 
-            //  Register with a unique username
-            System.out.println("Enter a unique username: ");
-            String username = userInput.readLine();
-            out.println("REGISTER " + username);
-
-
-
-            //  Start a thread for listening to messages from the server
-            Thread listeningThread = new Thread(() -> {
+            // Start a thread to listen for messages from the server
+            Thread serverListener = new Thread(() -> {
                 try {
-                    while (true) {
-                        String serverMessage = in.readLine();
-                        if (serverMessage != null) {
-                            System.out.println(serverMessage);
-                        }
+                    String serverResponse;
+                    while ((serverResponse = in.readLine()) != null) {
+                        System.out.println(serverResponse);
                     }
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
             });
-            listeningThread.start();
+            serverListener.start();
 
-            //  implementing a loop to read user input and send message to the server
+            // Handle user input
             while (true) {
-                String message = userInput.readLine();
-                out.println(message);
+                userInput = consoleInput.readLine();
+                if (userInput != null) {
+                    out.println(userInput);
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();
+        } finally {
+            try {
+                if (socket != null) {
+                    socket.close(); // Close the socket in the finally block
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
 }

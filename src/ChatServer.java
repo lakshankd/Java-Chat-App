@@ -1,115 +1,107 @@
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.util.ArrayList;
-import java.util.List;
+import java.io.*;
+import java.net.*;
+import java.util.*;
+import java.util.concurrent.*;
 
 public class ChatServer {
-    private static final int PORT = 12345;
-    public static List<ClientHandler> clients = new ArrayList<>();
+    private static Map<String, PrintWriter> connectedClients = new ConcurrentHashMap<>();
 
     public static void main(String[] args) {
-        try {
-            ServerSocket serverSocket = new ServerSocket(PORT);
-            System.out.println("Chat server is running on Port " + PORT);
+        int port = 12346; // Change to your desired port number
+
+        try (ServerSocket serverSocket = new ServerSocket(port)) {
+            System.out.println("Server is running and listening on port " + port);
 
             while (true) {
                 Socket clientSocket = serverSocket.accept();
-                System.out.println("New client is connected: " + clientSocket);
-
-                ClientHandler clientHandler = new ClientHandler(clientSocket);
-                clients.add(clientHandler);
-                clientHandler.start();
+                new ClientHandler(clientSocket).start();
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    static void broadcastMessage(String message, ClientHandler sender) {
-        for (ClientHandler client : clients) {
-            if (client != sender) {
-                client.sendMessage(message);
-            }
+    private static class ClientHandler extends Thread {
+        private Socket clientSocket;
+        private PrintWriter out;
+        private BufferedReader in;
+        private String username;
+
+        public ClientHandler(Socket socket) {
+            this.clientSocket = socket;
         }
-    }
 
-    static void removeClient(ClientHandler client) {
-        clients.remove(client);
-    }
-}
+        public void run() {
+            try {
+                out = new PrintWriter(clientSocket.getOutputStream(), true);
+                in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+                out.println("Please register with a unique username (e.g., REGISTER John)");
 
-class ClientHandler extends Thread {
-    private Socket socket;
-    private PrintWriter out;
-    private BufferedReader in;
-    private String username;
-
-    public ClientHandler(Socket socket) {
-        super();
-        this.socket = socket;
-    }
-
-    public void run() {
-        try {
-            out = new PrintWriter(socket.getOutputStream(), true);
-            in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-
-            out.println("Please Register: REGISTER <unique_user_name>");
-            String registrationMessage = in.readLine();
-
-            if (registrationMessage != null && registrationMessage.startsWith("REGISTER ")) {
-                username = registrationMessage.substring((9));
-                out.println("WELCOME " + username);
-
-                while (true) {
-                    String message = in.readLine();
-                    if (message == null) {
-                        break;
+                String registrationMessage = in.readLine();
+                if (registrationMessage.startsWith("REGISTER ")) {
+                    username = registrationMessage.substring(9).trim();
+                    if (connectedClients.containsKey(username)) {
+                        out.println("Username already taken. Please choose a different username.");
+                        return;
+                    } else {
+                        connectedClients.put(username, out);
+                        out.println("WELCOME " + username);
                     }
+                } else {
+                    out.println("Invalid registration. Please try again.");
+                    return;
+                }
 
+                String message;
+                while ((message = in.readLine()) != null) {
                     if (message.equals("LIST")) {
-                        List<String> connectedClients = ChatServer.clients.stream()
-                                .filter(client -> client != this)
-                                .map(client -> client.username)
-                                .toList();
-                        out.println("Connected Clients : " + String.join(", ", connectedClients));
+                        out.println("Connected Clients: " + connectedClients.keySet());
                     } else if (message.equals("LISTENING")) {
-                        // Client is waiting for message from the server
-                        while (true) {
-                            String receivedMessage = in.readLine();
-                            if (receivedMessage == null) {
-                                break;
+                        if (connectedClients.size() == 1) {
+                            out.println("No other clients are present. Waiting for input.");
+                            while (true) {
+                                String inputFromClient = in.readLine();
+                                if (inputFromClient != null) {
+                                    broadcastMessage(username + ": " + inputFromClient);
+                                }
                             }
-                            System.out.println(username + " received: " + receivedMessage);
+                        } else {
+                            out.println("Other clients are present. Use LIST to see the list.");
                         }
                     } else if (message.startsWith("SEND ")) {
                         String[] parts = message.split(" ", 3);
-                        String toClientName = parts[1];
-                        String sendMessage = parts[2];
-                        ChatServer.broadcastMessage(username + " say to " + toClientName + ": " + sendMessage, this);
+                        if (parts.length == 3) {
+                            String recipient = parts[1];
+                            String text = parts[2];
+                            PrintWriter recipientWriter = connectedClients.get(recipient);
+                            if (recipientWriter != null) {
+                                recipientWriter.println(username + " (private): " + text);
+                            } else {
+                                out.println("User " + recipient + " is not online.");
+                            }
+                        }
+                    } else {
+                        // Handle other commands or messages
                     }
                 }
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-            try {
-                out.close();
-                in.close();
-                socket.close();
-                ChatServer.removeClient(this);
-                System.out.println(username + " has left.");
             } catch (IOException e) {
                 e.printStackTrace();
+            } finally {
+                if (username != null) {
+                    connectedClients.remove(username);
+                }
+                try {
+                    clientSocket.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
         }
-    }
 
-    void sendMessage(String message) {
-        out.println(message);
+        private void broadcastMessage(String message) {
+            for (PrintWriter clientOut : connectedClients.values()) {
+                clientOut.println(message);
+            }
+        }
     }
 }
